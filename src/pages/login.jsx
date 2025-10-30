@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom"; 
 import API from "../services/api";
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
-  
+  const navigate = useNavigate(); 
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -114,7 +115,7 @@ export default function Login() {
                 fontWeight: "500",
                 cursor: "pointer",
               }}
-              onClick={() => (window.location.href = "http://localhost:3000/Signup")}
+              onClick={() => navigate("/")} 
             >
               Sign up
             </span>
