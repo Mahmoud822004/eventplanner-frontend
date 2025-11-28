@@ -1,22 +1,36 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; 
+import { useNavigate } from "react-router-dom";
 import API from "../services/api";
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+
     try {
       const res = await API.post("/login", form);
-      setMessage(res.data.message || "Login successful");
+
+      
+      if (res.data.token) {
+        localStorage.setItem("token", res.data.token);
+      }
+
+      
+      if (res.data.userId) {
+        localStorage.setItem("userId", res.data.userId);
+      }
+
+      setMessage("Login successful");
+      navigate("/events"); 
     } catch (err) {
+      console.error(err.response?.data || err);
       setMessage("Invalid email or password");
     }
   };
@@ -45,8 +59,12 @@ export default function Login() {
         <h2 style={{ marginBottom: "20px", color: "#333" }}>Welcome Back</h2>
 
         <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "15px" }}
+          onSubmit={handleLogin}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px",
+          }}
         >
           <input
             name="email"
@@ -115,7 +133,7 @@ export default function Login() {
                 fontWeight: "500",
                 cursor: "pointer",
               }}
-              onClick={() => navigate("/")} 
+              onClick={() => navigate("/signup")}
             >
               Sign up
             </span>
