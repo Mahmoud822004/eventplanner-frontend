@@ -9,6 +9,8 @@ export default function EventDetails() {
   const [event, setEvent] = useState(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
+  const [rsvpStatus, setRsvpStatus] = useState("");
+  const [invitationId, setInvitationId] = useState(null);
 
   const userId = parseInt(localStorage.getItem("userId"), 10);
 
@@ -39,6 +41,7 @@ export default function EventDetails() {
         invitedEvent.role = "attendee";
         setEvent(invitedEvent);
         fetchInvitedUsers(invitedEvent.id);
+        fetchUserInvitation(invitedEvent.id);
         return;
       }
 
@@ -51,22 +54,59 @@ export default function EventDetails() {
     }
   };
 
+  // Fetch all invitations for this event (with user info)
   const fetchInvitedUsers = async (eventId) => {
     try {
-      const res = await API.get(`/events/${eventId}/invitations`);
+      const res = await API.get(`/events/${eventId}/attendees`);
+      const invitations = res.data;
+
       setEvent((prev) => ({
         ...prev,
-        invitedUsers: res.data.map((inv) => inv.user_email || inv.user_id),
+        invitedUsersFull: invitations,
+        invitedUsers: invitations.map((inv) => inv.user?.name || inv.user_id),
+        goingUsers: invitations
+          .filter((inv) => inv.status === "going")
+          .map((inv) => inv.user?.name || inv.user_id),
       }));
     } catch (err) {
       console.error("Error fetching invitations:", err.response?.data || err);
-      setEvent((prev) => ({ ...prev, invitedUsers: [] }));
+      setEvent((prev) => ({
+        ...prev,
+        invitedUsersFull: [],
+        invitedUsers: [],
+        goingUsers: [],
+      }));
+    }
+  };
+
+  // Fetch current user's invitation to get ID and status
+  const fetchUserInvitation = async (eventId) => {
+    try {
+      const res = await API.get(`/events/${eventId}/attendees`);
+      const invitation = res.data.find((inv) => inv.user_id === userId);
+      if (invitation) {
+        setInvitationId(invitation.id);
+        setRsvpStatus(invitation.status);
+      }
+    } catch (err) {
+      console.error("Error fetching user invitation:", err.response?.data || err);
+    }
+  };
+
+  const updateRSVP = async (status) => {
+    try {
+      await API.put(`/rsvp/${invitationId}`, { status });
+      setRsvpStatus(status);
+      alert("RSVP updated!");
+      fetchInvitedUsers(event.id); // Refresh lists after RSVP change
+    } catch (err) {
+      console.error(err.response?.data || err);
+      alert("Failed to update RSVP");
     }
   };
 
   const handleInvite = async () => {
     if (!inviteEmail) return;
-
     try {
       const res = await API.post("/invite", {
         event_id: event.id,
@@ -107,7 +147,9 @@ export default function EventDetails() {
     >
       <div
         style={{
-          width: "500px",
+          width: "990px",
+          maxHeight: "70vh",
+          overflowY: "auto",
           background: "#fff",
           borderRadius: "16px",
           boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
@@ -115,49 +157,122 @@ export default function EventDetails() {
         }}
       >
         {/* Title */}
-        <h1 style={{ textAlign: "center", marginBottom: "20px", color: "#333", fontSize: "28px", fontWeight: "600" }}>
+        <h1
+          style={{
+            textAlign: "center",
+            marginBottom: "20px",
+            color: "#333",
+            fontSize: "28px",
+            fontWeight: "600",
+          }}
+        >
           {event.title}
         </h1>
 
         {/* Event Info */}
         <div style={{ marginBottom: "20px", color: "#444" }}>
-          <p><strong>Date:</strong> {new Date(event.date).toLocaleDateString()}</p>
-          <p><strong>Time:</strong> {event.time}</p>
-          <p><strong>Location:</strong> {event.location}</p>
+          <p>
+            <strong>Date:</strong> {new Date(event.date).toLocaleDateString()}
+          </p>
+          <p>
+            <strong>Time:</strong> {event.time}
+          </p>
+          <p>
+            <strong>Location:</strong> {event.location}
+          </p>
           <p style={{ marginTop: "10px" }}>{event.description}</p>
           <p style={{ marginTop: "10px" }}>
             <strong>Your Role:</strong>{" "}
-            <span style={{
-              padding: "3px 8px",
-              borderRadius: "8px",
-              fontSize: "12px",
-              backgroundColor: event.role === "organizer" ? "#6a5acd33" : "#3b82f633",
-              color: event.role === "organizer" ? "#6a5acd" : "#3b82f6",
-            }}>
+            <span
+              style={{
+                padding: "3px 8px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                backgroundColor:
+                  event.role === "organizer" ? "#6a5acd33" : "#3b82f633",
+                color: event.role === "organizer" ? "#6a5acd" : "#3b82f6",
+              }}
+            >
               {event.role}
             </span>
           </p>
         </div>
 
-        {/* Invited Users */}
-        <div style={{ marginBottom: "20px" }}>
-          <h2 style={{ marginBottom: "10px", fontSize: "18px", fontWeight: "500" }}>Invited Users</h2>
-          <ul style={{ padding: "10px", borderRadius: "12px", background: "#f1f5f9", listStyle: "none", maxHeight: "150px", overflowY: "auto" }}>
-            {event.invitedUsers?.length > 0 ? (
-              event.invitedUsers.map((email, idx) => (
-                <li key={idx} style={{ marginBottom: "5px", color: "#555" }}>• {email}</li>
-              ))
-            ) : (
-              <li style={{ color: "#777" }}>No invited users yet.</li>
-            )}
-          </ul>
-        </div>
+        {/* RSVP Section for Attendees */}
+        {event.role === "attendee" && invitationId && (
+          <div style={{ marginBottom: "20px" }}>
+            <h3>Your RSVP Status:</h3>
+            <select
+              value={rsvpStatus}
+              onChange={(e) => updateRSVP(e.target.value)}
+              style={{ padding: "10px", borderRadius: "8px", fontSize: "16px" }}
+            >
+              <option value="">Select</option>
+              <option value="going">Going</option>
+              <option value="maybe">Maybe</option>
+              <option value="not_going">Not Going</option>
+            </select>
+          </div>
+        )}
 
-        {/* Invite Section */}
+        {/* Invited Users */}
         {event.role === "organizer" && (
           <div style={{ marginBottom: "20px" }}>
-            <h2 style={{ marginBottom: "10px", fontSize: "18px", fontWeight: "500" }}>Invite User</h2>
-            <div style={{ display: "flex", gap: "10px" }}>
+            <h2 style={{ marginBottom: "10px", fontSize: "18px", fontWeight: "500" }}>
+              Invited Users
+            </h2>
+            <ul
+              style={{
+                padding: "10px",
+                borderRadius: "12px",
+                background: "#f1f5f9",
+                listStyle: "none",
+                maxHeight: "150px",
+                overflowY: "auto",
+              }}
+            >
+              {event.invitedUsers?.length > 0 ? (
+                event.invitedUsers.map((name, idx) => (
+                  <li key={idx} style={{ marginBottom: "5px", color: "#555" }}>
+                    • {name}
+                  </li>
+                ))
+              ) : (
+                <li style={{ color: "#777" }}>No invited users yet.</li>
+              )}
+            </ul>
+
+            {/* Going Users */}
+            {event.goingUsers && (
+              <div style={{ marginTop: "15px" }}>
+                <h2 style={{ marginBottom: "10px", fontSize: "18px", fontWeight: "500" }}>
+                  Going Users
+                </h2>
+                <ul
+                  style={{
+                    padding: "10px",
+                    borderRadius: "12px",
+                    background: "#e6f4ea",
+                    listStyle: "none",
+                    maxHeight: "150px",
+                    overflowY: "auto",
+                  }}
+                >
+                  {event.goingUsers.length > 0 ? (
+                    event.goingUsers.map((name, idx) => (
+                      <li key={idx} style={{ marginBottom: "5px", color: "#2e7d32" }}>
+                        • {name}
+                      </li>
+                    ))
+                  ) : (
+                    <li style={{ color: "#777" }}>No users are going yet.</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Invite Section */}
+            <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
               <input
                 type="email"
                 placeholder="Enter user email"
@@ -169,10 +284,7 @@ export default function EventDetails() {
                   borderRadius: "8px",
                   border: "1px solid #ccc",
                   fontSize: "14px",
-                  transition: "border-color 0.3s",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#6a5acd")}
-                onBlur={(e) => (e.target.style.borderColor = "#ccc")}
               />
               <button
                 onClick={handleInvite}
@@ -184,21 +296,14 @@ export default function EventDetails() {
                   borderRadius: "8px",
                   fontWeight: "600",
                   cursor: "pointer",
-                  transition: "transform 0.2s, opacity 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = "scale(1.03)";
-                  e.target.style.opacity = "0.9";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = "scale(1)";
-                  e.target.style.opacity = "1";
                 }}
               >
                 Invite
               </button>
             </div>
-            {inviteMessage && <p style={{ color: "green", marginTop: "8px" }}>{inviteMessage}</p>}
+            {inviteMessage && (
+              <p style={{ color: "green", marginTop: "8px" }}>{inviteMessage}</p>
+            )}
           </div>
         )}
 
@@ -215,10 +320,7 @@ export default function EventDetails() {
               fontWeight: "600",
               cursor: "pointer",
               marginBottom: "10px",
-              transition: "opacity 0.2s",
             }}
-            onMouseEnter={(e) => (e.target.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.target.style.opacity = "1")}
           >
             Delete Event
           </button>
@@ -235,10 +337,7 @@ export default function EventDetails() {
             color: "#fff",
             fontWeight: "500",
             cursor: "pointer",
-            transition: "opacity 0.2s",
           }}
-          onMouseEnter={(e) => (e.target.style.opacity = "0.85")}
-          onMouseLeave={(e) => (e.target.style.opacity = "1")}
         >
           Back to Events
         </button>
